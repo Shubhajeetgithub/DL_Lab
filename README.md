@@ -1,4 +1,3 @@
-# MidSem revision
 ### Tensor basics
 - `.view()` : use when you know that the tensor is contiguous and want to save time by preventing unnecessary copy. 
 ```python
@@ -29,6 +28,45 @@ merged = torch.cat([f1, f2], dim=1)  # shape (32, 128, 28, 28)
 - Autograd: Calling <scaler_loss>`.backward()` stores gradients at 
 	- leaf tensors (those created by user and not as the result of any operation) with `requires_grad = True`
 	- Non-leaf tensor with `.retain_grad()`.
+
+### Shape Analysis
+`.shape` works on Tensors, not `Dataset` (or `Subset`) because a PyTorch `Dataset` (or a `Subset`) isn't a single block of data stored in memory—it’s more like a **map** or a **recipe book**. Do this to get their shape ->
+```python
+# (B, C, H, W)
+# for loaders
+data_iter = iter(train_loader)
+images, labels = next(data_iter)
+# for dataset
+sample_data, sample_label = train_dataset[0]
+B = labels.size(0)
+B = len(train_dataset)
+C, H, W = sample_data.shape # or B, C, H, W = images.shape
+```
+Debugging tip: Put a `print(x.shape)` inside your `forward` method during debugging.
+```python
+class SimpleNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        # Input: (B, 3, 32, 32)
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, padding=1) 
+        # Output: (B, 16, 32, 32) because padding=1 keeps size same for 3x3 kernel
+        
+        self.pool = nn.MaxPool2d(2, 2) 
+        # Output: (B, 16, 16, 16)
+        
+        self.fc = nn.Linear(16 * 16 * 16, 10) 
+        # Flattened input must match: 16 channels * 16 height * 16 width
+
+    def forward(self, x):
+	    print(x.shape) # <- Debugger
+        x = self.pool(self.conv1(x))
+        x = x.view(x.size(0), -1) # Flatten to (B, 4096)
+        x = self.fc(x)
+        print(x.shape) # <- Debugger
+        return x
+```
+`nn.Conv2d(in_channels=I, out_channels=O, kernel_size=K, stride=S, padding=P)` expects **4D tensors**, i.e., $(B, I, N_I, N_I) \rightarrow (B, O, N_O, N_O)$ where $N_O = \left\lfloor \frac{N_I + 2P - K}{S} \right\rfloor + 1$  $\rightarrow \text{no. of params} = I * O * K^2 + O$.
+`nn.Linear(in_channels=I, out_channels=O)` expect **2D tensors**, i.e., $(B, I) \rightarrow (B, O)$ $\rightarrow \text{no. of params} = I * O + O$. So, in `__init__` you need to write `nn.Linear(C * H * W, out_features)` and in `forward` you need to write `x = x.view(x.size(0), -1)`.
 ### Basic imports
 ```python
 import torch
