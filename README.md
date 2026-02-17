@@ -66,7 +66,24 @@ class SimpleNet(nn.Module):
         return x
 ```
 `nn.Conv2d(in_channels=I, out_channels=O, kernel_size=K, stride=S, padding=P)` expects **4D tensors**, i.e., $(B, I, N_I, N_I) \rightarrow (B, O, N_O, N_O)$ where $N_O = \left\lfloor \frac{N_I + 2P - K}{S} \right\rfloor + 1$  $\rightarrow \text{no. of params} = I * O * K^2 + O$.
-`nn.Linear(in_channels=I, out_channels=O)` expect **2D tensors**, i.e., $(B, I) \rightarrow (B, O)$ $\rightarrow \text{no. of params} = I * O + O$. So, in `__init__` you need to write `nn.Linear(C * H * W, out_features)` and in `forward` you need to write `x = x.view(x.size(0), -1)`.
+`nn.Linear(in_features=I, out_features=O)` expect **2D tensors**, i.e., $(B, I) \rightarrow (B, O)$ $\rightarrow \text{no. of params} = I * O + O$. So, in `__init__` you need to write `nn.Linear(C * H * W, out_features)` and in `forward` you need to write `x = x.view(x.size(0), -1)`.
+**Practice**: calculate input dimension to first inner layer and number of model params for AlexNet. (Ans: 256 * 5 * 5, 47238648)
+```
+nn.Conv2d(in_channels=3, out_channels=96, kernel_size=11, stride=4, padding=1),  
+nn.ReLU(), nn.MaxPool2d(kernel_size=3, stride=2),  
+nn.Conv2d(in_channels=96, out_channels=256, kernel_size=5, padding=2), nn.ReLU(),  
+nn.MaxPool2d(kernel_size=3, stride=2),  
+nn.Conv2d(in_channels=256, out_channels=384, kernel_size=3, padding=1), nn.ReLU(),  
+nn.Conv2d(in_channels=384, out_channels=384, kernel_size=3, padding=1), nn.ReLU(),  
+nn.Conv2d(in_channels=384, out_channels=256, kernel_size=3, padding=1), nn.ReLU(),  
+nn.MaxPool2d(kernel_size=3, stride=2), nn.Flatten(),  
+nn.Linear(in_features=256 * 5 * 5, out_features=4096), nn.ReLU(), nn.Dropout(p=0.5),  
+nn.Linear(in_features=4096, out_features=4096), nn.ReLU(),nn.Dropout(p=0.5),  
+nn.Linear(in_features=4096, out_features=120)
+```
+```
+3 * 96 * (11 ** 2) + 96 + 96 * 256 * 25 + 256 + 256 * 384 * 9 + 384 + 384 * 384 * 9 + 384 + 384 * 256 * 9 + 256 + 256 * 5 * 5 * 4096 + 4096 + 4096 * 4096 + 4096 + 4096 * 120 + 120 = 47238648
+```
 ### Basic imports
 ```python
 import torch
@@ -107,7 +124,7 @@ def show_image(dataset):
 ```python
 from tqdm import tqdm
 os.makedirs("./models", exist_ok=True)
-def train_model(model, train_loader, val_loader, optimizer=None, criterion=None):
+def train_model(model, train_loader, val_loader, optimizer=None, criterion=None, verbose=True):
     if criterion is None:
         criterion = nn.CrossEntropyLoss()
     if optimizer is None:
@@ -132,7 +149,7 @@ def train_model(model, train_loader, val_loader, optimizer=None, criterion=None)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            if (i + 1) % 50 == 0:
+            if verbose and (i + 1) % 50 == 0:
                 print(f"Epoch [{epoch+1}/{NUM_EPOCHS}], Step [{i+1}/{n_total_steps}], Loss: {loss.item():.4f}")
         train_loss /= len(train_loader.dataset)
         epochs.append(epoch + 1)
@@ -148,16 +165,19 @@ def train_model(model, train_loader, val_loader, optimizer=None, criterion=None)
                 val_loss += loss.item() * batch_size
         val_loss /= len(val_loader.dataset)
         val_losses.append(val_loss)
-        print(f"Epoch [{epoch + 1}/{NUM_EPOCHS}], Train loss {train_loss:.4f}, Val loss {val_loss:.4f}")
+        if verbose:
+	        print(f"Epoch [{epoch + 1}/{NUM_EPOCHS}], Train loss {train_loss:.4f}, Val loss {val_loss:.4f}")
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             torch.save({
                 'model_state_dict' : model.state_dict(),
                 'optimizer_state_dict' : optimizer.state_dict()
             }, f"./models/Epoch{epoch+1}.pth")
-            print("Saved best model")
+            if verbose:
+	            print("Saved best model")
 
-    print("Finished training")
+    if verbose:
+	    print("Finished training")
     plt.plot(epochs, train_losses, label="Train Loss", marker="o")
     plt.plot(epochs, val_losses, label="Val Loss", marker="o")
     plt.legend()
