@@ -29,6 +29,66 @@ merged = torch.cat([f1, f2], dim=1)  # shape (32, 128, 28, 28)
 	- leaf tensors (those created by user and not as the result of any operation) with `requires_grad = True`
 	- Non-leaf tensor with `.retain_grad()`.
 
+- use $-1$ in `.view` or `.reshape` to imply a dimension 
+- $\cdots$ (epsilos) to imply the dimensions in extracting. 
+- `.flatten(start_dim)` method takes all dimensions starting from start_dim and multiplies their sizes together to create one new dimension. 
+- `.mean(dim)` takes mean over that dimension, retaining other dimensions
+- use `.detach()` when you want to **cut** the computational graph -> useful in GANs.
+```python
+output = net(x)              # shape: [batch_size, 784]
+images = output.view(-1, 1, 28, 28)  # shape: [batch_size, 1, 28, 28]
+
+# assume feats -> (B*T, C_o, 1, 1)
+feats = feats.flatten(1) # collapses (C_o, 1, 1) -> (C_o * 1 * 1,)
+feats = feats.reshape(B, T, -1).mean(dim=1) # (B*T, C_o) -> (B, T, C_o) -> (B, C_o)
+
+x = torch.randn(16, 1, 28, 28)
+x[0][0]     # -> (28, 28)
+# equiv to x[0,0] or x[0,0,...] or x[0,0,:,:]
+
+torch.stack(
+    [transform(arr[:, t]) for t in range(arr.shape[1])], dim=1
+) # (C, T, H, W) -> (C, T, H, W)
+# arr[:, t] == arr[:, t, :, :] == arr[:, t, ...] == arr[..., t, :, :]
+```
+- To get model architecture use `named_children()`
+- To get model size and params count, use `torchinfo.summary()`
+```python
+import torchvision
+model = torchvision.models.resnet34(weights=torchvision.models.ResNet34_Weights.IMAGENET1K_V1)
+for name, module in model.named_children():
+    print(name)
+""" output
+conv1
+bn1
+relu
+maxpool
+layer1
+layer2
+layer3
+layer4
+avgpool
+fc
+"""
+from torchinfo import summary
+# Pass a dummy input shape (batch_size, channels, height, width)
+summary(model, input_size=(1, 3, 224, 224))
+""" output
+...
+=============================================
+Total params: 21,797,672
+Trainable params: 21,797,672
+Non-trainable params: 0
+Total mult-adds (Units.GIGABYTES): 3.66
+=============================================
+Input size (MB): 0.60
+Forward/backward pass size (MB): 59.82
+Params size (MB): 87.19
+Estimated Total Size (MB): 147.61
+=============================================
+"""
+```
+
 ### Shape Analysis
 `.shape` works on Tensors, not `Dataset` (or `Subset`) because a PyTorch `Dataset` (or a `Subset`) isn't a single block of data stored in memory—it’s more like a **map** or a **recipe book**. Do this to get their shape ->
 ```python
